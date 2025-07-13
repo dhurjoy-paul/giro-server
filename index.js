@@ -43,6 +43,46 @@ async function run() {
   try {
     await client.connect();
 
+    // POST /jwt (get token)
+    app.post('/jwt', async (req, res) => {
+      const { email } = req.body;
+      const token = jwt.sign({ email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '365d' });
+      res.send({ token });
+    });
+
+    // save or update a users info in db
+    app.post('/user', async (req, res) => {
+      const userData = req.body
+      userData.role = 'tourist'
+      userData.created_at = new Date().toISOString()
+      userData.last_loggedIn = new Date().toISOString()
+
+      const query = { email: userData?.email }
+
+      const alreadyExists = await usersCollection.findOne(query)
+      console.log('User already exists-->', !!alreadyExists)
+      if (!!alreadyExists) {
+        console.log('Updating user data......')
+        const result = await usersCollection.updateOne(query, {
+          $set: { last_loggedIn: new Date().toISOString() },
+        })
+        return res.send(result)
+      }
+
+      console.log('Creating user data......')
+      // return console.log(userData)
+      const result = await usersCollection.insertOne(userData)
+      res.send(result)
+    })
+
+    // get a user's role
+    app.get('/user/role/:email', async (req, res) => {
+      const email = req.params.email
+      const user = await usersCollection.findOne({ email })
+      if (!user) return res.status(404).send({ message: 'User Not Found.' })
+      res.send({ role: user?.role })
+    })
+
 
 
     // Send a ping to confirm a successful connection
