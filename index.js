@@ -50,7 +50,7 @@ async function run() {
       res.send({ token });
     });
 
-    // save or update a users info in db
+    // save or update a user's info in db
     app.post('/user', async (req, res) => {
       const userData = req.body
       userData.role = 'tourist'
@@ -98,7 +98,22 @@ async function run() {
       }
     });
 
-    
+    // update user by email
+    app.patch('/users/:email', verifyToken, async (req, res) => {
+      const { email } = req.params;
+
+      if (email !== req.user.email) {
+        return res.status(403).send({ message: 'Forbidden' });
+      }
+
+      const { name, image } = req.body;
+      const result = await usersCollection.updateOne(
+        { email },
+        { $set: { name, image } }
+      );
+      res.send(result);
+    });
+
 
 
 
