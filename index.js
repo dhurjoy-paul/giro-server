@@ -122,7 +122,17 @@ async function run() {
       res.send(result)
     })
 
+    // get stories by email
+    app.get('/stories/:email', verifyToken, async (req, res) => {
+      const { email } = req.params;
 
+      if (email !== req.user.email) {
+        return res.status(403).send({ message: 'Forbidden' });
+      }
+
+      const result = await storiesCollection.find({ author_email: email }).toArray()
+      res.send(result)
+    })
 
 
 
