@@ -83,6 +83,40 @@ async function run() {
       res.send({ role: user?.role })
     })
 
+    // get user by email
+    app.get('/users/:email', verifyToken, async (req, res) => {
+      try {
+        const { email } = req.params;
+        const user = await usersCollection.findOne({ email });
+
+        if (!user) return res.status(404).json({ message: 'User not found' });
+
+        res.json(user);
+      } catch (error) {
+        console.error('Error fetching user:', error);
+        res.status(500).json({ message: 'Internal server error' });
+      }
+    });
+
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
     // Send a ping to confirm a successful connection
