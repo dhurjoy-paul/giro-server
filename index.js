@@ -39,6 +39,7 @@ const client = new MongoClient(process.env.MONGODB_URI, {
 async function run() {
   const db = client.db('tripdb')
   const usersCollection = db.collection('users')
+  const storiesCollection = db.collection('stories')
 
   try {
     await client.connect();
@@ -114,7 +115,12 @@ async function run() {
       res.send(result);
     });
 
-
+    // Add Story
+    app.post('/stories', verifyToken, async (req, res) => {
+      const storyData = req.body;
+      const result = await storiesCollection.insertOne(storyData)
+      res.send(result)
+    })
 
 
 
