@@ -3,6 +3,7 @@ const express = require('express')
 const cors = require('cors')
 const { MongoClient, ServerApiVersion } = require('mongodb')
 const jwt = require('jsonwebtoken')
+const { ObjectId } = require('mongodb');
 const stripe = require('stripe')(process.env.STRIPE_SK_KEY)
 
 const app = express()
@@ -117,22 +118,34 @@ async function run() {
 
     // Add Story
     app.post('/stories', verifyToken, async (req, res) => {
-      const storyData = req.body;
-      const result = await storiesCollection.insertOne(storyData)
-      res.send(result)
-    })
-
-    // get stories by email
-    app.get('/stories/:email', verifyToken, async (req, res) => {
-      const { email } = req.params;
-
-      if (email !== req.user.email) {
-        return res.status(403).send({ message: 'Forbidden' });
+      try {
+        const storyData = req.body;
+        const result = await storiesCollection.insertOne(storyData);
+        res.send(result);
+      } catch (err) {
+        res.status(500).send({ message: 'Failed to create story' });
       }
+    });
 
-      const result = await storiesCollection.find({ author_email: email }).toArray()
-      res.send(result)
-    })
+    // Get all stories by email
+    app.get('/stories', verifyToken, async (req, res) => {
+      try {
+        const { email } = req.query;
+
+        if (!email || email !== req.user.email) {
+          return res.status(403).send({ message: 'Forbidden' });
+        }
+
+        const stories = await storiesCollection
+          .find({ author_email: email })
+          .sort({ createdAt: -1 })
+          .toArray();
+
+        res.send(stories);
+      } catch (err) {
+        res.status(500).send({ message: 'Failed to fetch user stories' });
+      }
+    });
 
 
 
