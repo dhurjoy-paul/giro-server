@@ -147,6 +147,50 @@ async function run() {
       }
     });
 
+    // get story by ID
+    app.get('/stories/:id', verifyToken, async (req, res) => {
+      try {
+        const { id } = req.params;
+
+        const story = await storiesCollection.findOne({ _id: new ObjectId(id) });
+
+        if (!story || story.author_email !== req.user.email) {
+          return res.status(403).send({ message: 'Forbidden' });
+        }
+
+        const result = await storiesCollection.findOne({ _id: new ObjectId(id) });
+        res.send(result);
+      } catch {
+        res.status(500).send({ message: 'Failed to find story' });
+      }
+    })
+
+    // edit story by ID
+    app.patch('/stories/:id', verifyToken, async (req, res) => {
+      try {
+        const { id } = req.params;
+        const email = req.query.email;
+
+        if (!email || email !== req.user.email) {
+          return res.status(403).send({ message: 'Forbidden' });
+        }
+
+        const { $set, $push, $pull } = req.body;
+
+        const filter = { _id: new ObjectId(id), author_email: email };
+        const updateDoc = {
+          ...(!!$set && { $set: { ...$set, modified_at: new Date().toISOString() } }),
+          ...(!!$push && { $push }),
+          ...(!!$pull && { $pull }),
+        };
+
+        const result = await storiesCollection.updateOne(filter, updateDoc);
+        res.send(result);
+      } catch (err) {
+        res.status(500).send({ message: 'Failed to update story' });
+      }
+    });
+
     // delete story by ID
     app.delete('/stories/:id', verifyToken, async (req, res) => {
       try {
