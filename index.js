@@ -116,7 +116,7 @@ async function run() {
       res.send(result);
     });
 
-    // Add Story
+    // add Story
     app.post('/stories', verifyToken, async (req, res) => {
       try {
         const storyData = req.body;
@@ -127,7 +127,7 @@ async function run() {
       }
     });
 
-    // Get all stories by email
+    // get all stories by email
     app.get('/stories', verifyToken, async (req, res) => {
       try {
         const { email } = req.query;
@@ -144,6 +144,24 @@ async function run() {
         res.send(stories);
       } catch (err) {
         res.status(500).send({ message: 'Failed to fetch user stories' });
+      }
+    });
+
+    // delete story by ID
+    app.delete('/stories/:id', verifyToken, async (req, res) => {
+      try {
+        const { id } = req.params;
+
+        const story = await storiesCollection.findOne({ _id: new ObjectId(id) });
+
+        if (!story || story.author_email !== req.user.email) {
+          return res.status(403).send({ message: 'Forbidden' });
+        }
+
+        const result = await storiesCollection.deleteOne({ _id: new ObjectId(id) });
+        res.send(result);
+      } catch (err) {
+        res.status(500).send({ message: 'Failed to delete story' });
       }
     });
 
