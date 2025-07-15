@@ -166,7 +166,7 @@ async function run() {
     app.patch('/users/role', verifyToken, verifyRole('admin'), async (req, res) => {
       try {
         const { email, role } = req.body;
-        const validRoles = ['tourist', 'tourGuide', 'admin'];
+
         if (!role) {
           return res.status(400).send({ message: 'No role given' });
         }
@@ -341,6 +341,82 @@ async function run() {
         res.status(500).send({ message: 'Failed to submit application' });
       }
     });
+
+    // get applications (for admin)
+    app.get('/applications', verifyToken, verifyRole('admin'), async (req, res) => {
+      try {
+        const { search = '', status = 'pending', page = 1, limit = 10 } = req.query;
+        const pageNum = parseInt(page);
+        const limitNum = parseInt(limit);
+        const skip = (pageNum - 1) * limitNum;
+
+        const filter = { status };
+        if (search) {
+          filter.$or = [
+            { applicant_name: { $regex: search, $options: 'i' } },
+            { applicant_email: { $regex: search, $options: 'i' } },
+          ];
+        }
+
+        const total = await applicationsCollection.countDocuments(filter);
+        const applications = await applicationsCollection
+          .find(filter)
+          .sort({ applied_at: -1 })
+          .skip(skip)
+          .limit(limitNum)
+          .toArray();
+
+        res.send({ data: applications, total });
+      } catch (err) {
+        console.error(err);
+        res.status(500).send({ message: 'Failed to fetch applications' });
+      }
+    });
+
+    // delete application by ID
+    app.delete('/applications/:id', verifyToken, verifyRole('admin'), async (req, res) => {
+      try {
+        const { id } = req.params;
+        const result = await applicationsCollection.deleteOne({ _id: new ObjectId(id) });
+
+        res.send({ deleted: result.deletedCount > 0 });
+      } catch (err) {
+        res.status(500).send({ message: 'Failed to delete application' });
+      }
+    });
+
+    // change application status (accept / reject)
+    app.patch('/applications/:id', verifyToken, verifyRole('admin'), async (req, res) => {
+      try {
+        const { id } = req.params;
+        const { status } = req.body;
+
+        const applicationId = new ObjectId(id);
+
+        const updateResult = await applicationsCollection.updateOne(
+          { _id: applicationId },
+          { $set: { status } }
+        );
+
+        if (status === 'accepted') {
+          const application = await applicationsCollection.findOne({ _id: applicationId });
+
+          if (application?.applicant_email) {
+            await usersCollection.updateOne(
+              { email: application.applicant_email },
+              { $set: { role: 'tourGuide' } }
+            );
+          }
+        }
+
+        res.send({ modified: updateResult.modifiedCount });
+      } catch (err) {
+        res.status(500).send({ message: 'Failed to update application' });
+      }
+    });
+
+
+
 
 
 
