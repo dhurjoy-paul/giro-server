@@ -41,8 +41,17 @@ async function run() {
   const db = client.db('tripdb')
   const usersCollection = db.collection('users')
   const storiesCollection = db.collection('stories')
+  const applicationsCollection = db.collection('applications')
 
   try {
+    // Role Verification Middleware
+    const verifyRole = (role) => async (req, res, next) => {
+      const email = req?.user?.email
+      const user = await usersCollection.findOne({ email })
+      if (!user || user?.role !== role) return res.status(403).send({ message: `${role} access only` })
+      next()
+    }
+
     await client.connect();
 
     // POST /jwt (get token)
@@ -116,6 +125,45 @@ async function run() {
       res.send(result);
     });
 
+    // get users for admin table
+    app.get('/users', verifyToken, verifyRole('admin'), async (req, res) => {
+      try {
+        const { search = '', role, page = 1, limit = 10 } = req.query;
+        const pageNum = parseInt(page);
+        const limitNum = parseInt(limit);
+        const skip = (pageNum - 1) * limitNum;
+
+        const filter = {};
+
+        if (search) {
+          filter.$or = [
+            { name: { $regex: search, $options: 'i' } },
+            { email: { $regex: search, $options: 'i' } },
+          ];
+        }
+
+        if (role && ['tourist', 'tourGuide', 'admin'].includes(role)) {
+          filter.role = role;
+        }
+
+        const total = await usersCollection.countDocuments(filter);
+
+        const users = await usersCollection
+          .find(filter)
+          .sort({ last_loggedIn: -1 })
+          .skip(skip)
+          .limit(limitNum)
+          .toArray();
+
+        res.send({ data: users, total });
+      } catch (err) {
+        console.error(err);
+        res.status(500).send({ message: 'Failed to fetch users' });
+      }
+    });
+
+
+
     // add Story
     app.post('/stories', verifyToken, async (req, res) => {
       try {
@@ -136,10 +184,21 @@ async function run() {
           return res.status(403).send({ message: 'Forbidden' });
         }
 
-        const stories = await storiesCollection
-          .find({ author_email: email })
-          .sort({ createdAt: -1 })
-          .toArray();
+        const stories = await storiesCollection.aggregate([
+          {
+            $match: { author_email: email }
+          },
+          {
+            $addFields: {
+              sortTime: {
+                $ifNull: ['$modified_at', '$createdAt']
+              }
+            }
+          },
+          {
+            $sort: { sortTime: -1 }
+          }
+        ]).toArray();
 
         res.send(stories);
       } catch (err) {
@@ -209,6 +268,60 @@ async function run() {
       }
     });
 
+    // get guide-application by email
+    app.get('/applications/:email', verifyToken, async (req, res) => {
+      try {
+        const email = req.params.email;
+
+        if (email !== req.user.email) {
+          return res.status(403).send({ message: 'Forbidden' });
+        }
+
+        const application = await applicationsCollection.findOne({ applicant_email: email });
+        if (!application) return res.status(404).send(null);
+
+        res.send(application);
+      } catch (err) {
+        res.status(500).send({ message: 'Failed to fetch application' });
+      }
+    });
+
+    // post or, update guide-application by email
+    app.post('/applications', verifyToken, async (req, res) => {
+      try {
+        const { applicant_email } = req.body;
+
+        const existingApp = await applicationsCollection.findOne({ applicant_email });
+
+        if (existingApp && existingApp.status !== 'rejected') {
+          return res.status(409).send({ message: 'Application already submitted' });
+        }
+
+        if (existingApp && existingApp.status === 'rejected') {
+          const result = await applicationsCollection.updateOne(
+            { _id: existingApp._id },
+            {
+              $set: {
+                ...req.body,
+                status: 'pending',
+                applied_at: new Date().toISOString(),
+              },
+            }
+          );
+          return res.send({ updated: result.modifiedCount > 0 });
+        }
+
+        const result = await applicationsCollection.insertOne({
+          ...req.body,
+          status: 'pending',
+          applied_at: new Date().toISOString(),
+        });
+
+        res.send({ insertedId: result.insertedId });
+      } catch (err) {
+        res.status(500).send({ message: 'Failed to submit application' });
+      }
+    });
 
 
 
