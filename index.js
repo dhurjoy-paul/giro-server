@@ -162,7 +162,26 @@ async function run() {
       }
     });
 
+    // change user's role
+    app.patch('/users/role', verifyToken, verifyRole('admin'), async (req, res) => {
+      try {
+        const { email, role } = req.body;
+        const validRoles = ['tourist', 'tourGuide', 'admin'];
+        if (!role) {
+          return res.status(400).send({ message: 'No role given' });
+        }
 
+        const result = await usersCollection.updateOne(
+          { email },
+          { $set: { role } }
+        );
+
+        res.send({ modified: result.modifiedCount });
+      } catch (err) {
+        console.error(err);
+        res.status(500).send({ message: 'Failed to update user role' });
+      }
+    });
 
     // add Story
     app.post('/stories', verifyToken, async (req, res) => {
