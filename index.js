@@ -626,6 +626,39 @@ async function run() {
       res.send({ modifiedCount: result.modifiedCount });
     });
 
+    // Admin Dashboard Stats 
+    app.get('/admin/stats', verifyToken, verifyRole('admin'), async (req, res) => {
+      try {
+
+        const paymentAggregation = await bookingsCollection.aggregate([
+          { $match: { status: 'accepted' } },
+          { $group: { _id: null, total: { $sum: '$payment.price' } } }
+        ]).toArray();
+
+        const totalPayment = paymentAggregation[0]?.total || 0;
+
+        const [totalTourGuides, totalClients] = await Promise.all([
+          usersCollection.countDocuments({ role: 'tourGuide' }),
+          usersCollection.countDocuments({ role: 'tourist' }),
+        ]);
+
+        const [totalPackages, totalStories] = await Promise.all([
+          packagesCollection.countDocuments(),
+          storiesCollection.countDocuments(),
+        ]);
+
+        res.send({
+          totalPayment,
+          totalTourGuides,
+          totalPackages,
+          totalClients,
+          totalStories,
+        });
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ message: 'Failed to load admin stats' });
+      }
+    });
 
 
 
