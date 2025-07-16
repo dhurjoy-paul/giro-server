@@ -43,6 +43,7 @@ async function run() {
   const storiesCollection = db.collection('stories')
   const applicationsCollection = db.collection('applications')
   const packagesCollection = db.collection('packages')
+  const bookingsCollection = db.collection('bookings')
 
   try {
     // Role Verification Middleware
@@ -433,8 +434,62 @@ async function run() {
       res.send(result);
     })
 
+    // get Package by ID
+    app.get('/packages/:id', async (req, res) => {
+      try {
+        const id = req.params.id
+        const result = await packagesCollection.findOne({ _id: new ObjectId(id) })
+        res.send(result)
+      } catch {
+        res.status(500).send({ message: 'Failed to get package' })
+      }
+    })
 
+    // get all guides (tourGuide)
+    app.get('/guides', async (req, res) => {
+      try {
+        const result = await usersCollection.find({ role: 'tourGuide' }).project({ name: 1, email: 1, image: 1 }).toArray()
+        res.send(result)
+      } catch {
+        res.status(500).send({ message: 'Failed to get guides' })
+      }
+    })
 
+    // get guide by email
+    app.get('/guides/:email', async (req, res) => {
+      try {
+        const guide = await usersCollection.findOne({ email: req.params.email, role: 'tourGuide' })
+        if (!guide) return res.status(404).send({ message: 'Guide not found' })
+        res.send(guide)
+      } catch {
+        res.status(500).send({ message: 'Failed to fetch guide' })
+      }
+    })
+
+    // book a trip
+    app.post('/bookings', verifyToken, async (req, res) => {
+      try {
+        const booking = req.body
+        booking.status = 'pending'
+        booking.createdAt = new Date().toISOString()
+        const result = await bookingsCollection.insertOne(booking)
+        res.send(result)
+      } catch {
+        res.status(500).send({ message: 'Failed to book tour' })
+      }
+    })
+
+    // get user bookings (for tourist)
+    app.get('/bookings', verifyToken, async (req, res) => {
+      try {
+        const { email } = req.query
+        if (!email || email !== req.user.email) return res.status(403).send({ message: 'Forbidden' })
+        const bookings = await bookingsCollection.find({ tourist_email: email }).sort({ createdAt: -1 }).toArray()
+        res.send(bookings)
+      } catch {
+        res.status(500).send({ message: 'Failed to get bookings' })
+      }
+    })
 
 
 
