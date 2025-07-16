@@ -479,17 +479,123 @@ async function run() {
       }
     })
 
-    // get user bookings (for tourist)
+    // get user bookings with Pagination
     app.get('/bookings', verifyToken, async (req, res) => {
       try {
-        const { email } = req.query
-        if (!email || email !== req.user.email) return res.status(403).send({ message: 'Forbidden' })
-        const bookings = await bookingsCollection.find({ tourist_email: email }).sort({ createdAt: -1 }).toArray()
-        res.send(bookings)
+        const { email, page = 1, limit = 10 } = req.query;
+        if (req.user.email !== email) return res.status(403).send({ error: 'Forbidden' });
+
+        const query = { touristEmail: email };
+        const skip = (page - 1) * limit;
+
+        const [data, total] = await Promise.all([
+          bookingsCollection.find(query).skip(parseInt(skip)).limit(parseInt(limit)).toArray(),
+          bookingsCollection.countDocuments(query),
+        ]);
+
+        res.send({ data, total });
+      } catch (error) {
+        res.status(500).send({ error: error.message });
+      }
+    });
+
+    // get a booking by ID
+    app.get('/bookings/:id', verifyToken, verifyRole('tourist'), async (req, res) => {
+      try {
+        const id = req.params.id;
+        const booking = await bookingsCollection.findOne({ _id: new ObjectId(id) });
+
+        if (!booking) return res.status(404).send({ error: 'Booking not found' });
+        if (booking.touristEmail !== req.user.email) return res.status(403).send({ error: 'Forbidden' });
+
+        const result = await bookingsCollection.findOne({ _id: new ObjectId(id) });
+        res.send(result)
       } catch {
-        res.status(500).send({ message: 'Failed to get bookings' })
+        res.status(500).send({ message: 'Failed to get the booked tour' })
       }
     })
+
+    // cancel booking (when status pending)
+    app.delete('/bookings/:id', verifyToken, async (req, res) => {
+      try {
+        const id = req.params.id;
+        const booking = await bookingsCollection.findOne({ _id: new ObjectId(id) });
+
+        if (!booking) return res.status(404).send({ error: 'Booking not found' });
+        if (booking.touristEmail !== req.user.email) return res.status(403).send({ error: 'Forbidden' });
+        if (booking.status !== 'pending') return res.status(400).send({ error: 'Only pending bookings can be canceled' });
+
+        const result = await bookingsCollection.deleteOne({ _id: new ObjectId(id) });
+        res.send({ deletedCount: result.deletedCount });
+      } catch (error) {
+        res.status(500).send({ error: error.message });
+      }
+    });
+
+    // Stripe Payment Intent
+    app.post('/create-payment-intent', verifyToken, async (req, res) => {
+      try {
+        const { bookId } = req.body;
+        if (!bookId) return res.status(400).send({ error: 'Booking ID is required' });
+
+        const query = { _id: new ObjectId(bookId) };
+        const bookedTrip = await bookingsCollection.findOne(query)
+        if (!bookedTrip) return res.status(404).send({ error: 'Booked Trip is not found' });
+
+        const amount = Math.round(bookedTrip.price * 100);
+
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount,
+          currency: 'usd',
+          payment_method_types: ['card'],
+        });
+
+        res.send({ clientSecret: paymentIntent.client_secret });
+      } catch (error) {
+        res.status(500).send({ error: error.message });
+      }
+    });
+
+    // confirm payment & update booking status
+    app.post('/payments', verifyToken, async (req, res) => {
+      try {
+        const { bookingId, transactionId } = req.body;
+        if (!bookingId) return res.status(400).send({ error: 'Booking ID is required' });
+
+        const query = { _id: new ObjectId(bookingId) };
+        const bookedTrip = await bookingsCollection.findOne(query)
+        if (!bookedTrip) return res.status(404).send({ error: 'Booked Trip is not found' });
+
+        if (req.user.email !== email) return res.status(403).send({ error: 'Forbidden' });
+
+        const paymentData = {
+          transactionId,
+          price: bookedTrip.price,
+          paidAt: new Date().toISOString(),
+        };
+
+        const updateResult = await bookingsCollection.updateOne(
+          { _id: new ObjectId(bookingId) },
+          {
+            $set: {
+              status: 'in-review',
+              payment: paymentData,
+            }
+          }
+        );
+
+        if (updateResult.modifiedCount === 0) {
+          return res.status(404).send({ error: 'Booking not found or already updated' });
+        }
+
+        res.send({ message: 'Payment recorded and booking status updated successfully' });
+      } catch (error) {
+        res.status(500).send({ error: error.message });
+      }
+    });
+
+    
+
 
 
 
