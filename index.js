@@ -196,6 +196,12 @@ async function run() {
       }
     });
 
+    // get all story
+    app.get('/all-stories', async (req, res) => {
+      const result = await storiesCollection.find.toArray()
+      res.send(result)
+    })
+
     // get all stories by email
     app.get('/stories', verifyToken, async (req, res) => {
       try {
@@ -657,6 +663,29 @@ async function run() {
       } catch (error) {
         console.error(error);
         res.status(500).send({ message: 'Failed to load admin stats' });
+      }
+    });
+
+    // Get guide info
+    app.get('/guides/:email', async (req, res) => {
+      try {
+        const { email } = req.params;
+        const guide = await usersCollection.findOne({ email, role: 'tourGuide' });
+        if (!guide) return res.status(404).send({ message: 'Guide not found' });
+        res.send(guide);
+      } catch (err) {
+        res.status(500).send({ message: 'Failed to fetch guide' });
+      }
+    });
+
+    // Get public stories by guide email
+    app.get('/public-stories/:email', async (req, res) => {
+      try {
+        const { email } = req.params;
+        const stories = await storiesCollection.find({ author_email: email }).sort({ createdAt: -1 }).toArray();
+        res.send(stories);
+      } catch (err) {
+        res.status(500).send({ message: 'Failed to fetch stories' });
       }
     });
 
