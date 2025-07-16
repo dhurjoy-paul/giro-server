@@ -559,7 +559,7 @@ async function run() {
     // confirm payment & update booking status
     app.post('/payments', verifyToken, async (req, res) => {
       try {
-        const { bookingId, transactionId } = req.body;
+        const { bookingId, transactionId, email } = req.body;
         if (!bookingId) return res.status(400).send({ error: 'Booking ID is required' });
 
         const query = { _id: new ObjectId(bookingId) };
@@ -594,7 +594,37 @@ async function run() {
       }
     });
 
-    
+    // get assigned-tours (for guide)
+    app.get('/assigned-tours', verifyToken, verifyRole('tourGuide'), async (req, res) => {
+      const { email, page = 1, limit = 10 } = req.query;
+      if (req.user.email !== email) return res.status(403).send({ error: 'Forbidden' });
+
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+      const query = { guideEmail: email };
+      const [data, total] = await Promise.all([
+        bookingsCollection.find(query).skip(skip).limit(parseInt(limit)).toArray(),
+        bookingsCollection.countDocuments(query)
+      ]);
+      res.send({ data, total });
+    });
+
+    // update assigned-tour's status by ID
+    app.patch('/assigned-tours/:id', verifyToken, verifyRole('tourGuide'), async (req, res) => {
+      const { status } = req.body;
+      const id = req.params.id;
+      const valid = ['accepted', 'rejected'];
+      if (!valid.includes(status)) return res.status(400).send({ error: 'Invalid status' });
+
+      const booking = await bookingsCollection.findOne({ _id: new ObjectId(id) });
+      if (!booking || booking.guideEmail !== req.user.email) return res.status(404).send({ error: 'Not found' });
+      if (booking.status !== 'in-review') return res.status(400).send({ error: 'Only in-review can be updated' });
+
+      const result = await bookingsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { status } }
+      );
+      res.send({ modifiedCount: result.modifiedCount });
+    });
 
 
 
