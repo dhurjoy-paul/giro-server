@@ -42,6 +42,7 @@ async function run() {
   const usersCollection = db.collection('users')
   const storiesCollection = db.collection('stories')
   const applicationsCollection = db.collection('applications')
+  const packagesCollection = db.collection('packages')
 
   try {
     // Role Verification Middleware
@@ -385,7 +386,7 @@ async function run() {
       }
     });
 
-    // change application status (accept / reject)
+    // change application status (with role change) (accept / reject)
     app.patch('/applications/:id', verifyToken, verifyRole('admin'), async (req, res) => {
       try {
         const { id } = req.params;
@@ -415,7 +416,22 @@ async function run() {
       }
     });
 
+    // add package
+    app.post('/packages', verifyToken, async (req, res) => {
+      try {
+        const packageData = req.body;
+        const result = await packagesCollection.insertOne(packageData);
+        res.send(result);
+      } catch (err) {
+        res.status(500).send({ message: 'Failed to add package' });
+      }
+    });
 
+    // get all packages
+    app.get('/packages', async (req, res) => {
+      const result = await packagesCollection.find().toArray()
+      res.send(result);
+    })
 
 
 
