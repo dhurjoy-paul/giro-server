@@ -201,11 +201,16 @@ async function run() {
       }
     });
 
-    // get all story
+    // get all stories
     app.get('/all-stories', async (req, res) => {
-      const result = await storiesCollection.find.toArray()
-      res.send(result)
-    })
+      try {
+        const result = await storiesCollection.find().toArray();
+        res.send(result);
+      } catch (error) {
+        console.error("Error fetching stories:", error);
+        res.status(500).send({ error: "Failed to fetch stories" });
+      }
+    });
 
     // get all stories by email
     app.get('/stories', verifyToken, async (req, res) => {
@@ -700,6 +705,23 @@ async function run() {
       const result = await packagesCollection.aggregate([{ $sample: { size: count } }]).toArray()
       res.send(result)
     })
+
+    // get random stories of 'tourist'
+    app.get('/stories/random/:count', async (req, res) => {
+      try {
+        const count = parseInt(req.params.count);
+
+        const result = await storiesCollection.aggregate([
+          { $match: { author_role: { $regex: '^tourGuide$', $options: 'i' } } },
+          { $sample: { size: count } }
+        ]).toArray();
+
+        res.send(result);
+      } catch (error) {
+        console.error('Error fetching random tourist:', error);
+        res.status(500).send({ error: 'Internal server error' });
+      }
+    });
 
     // get random guides 'tourGuide'
     app.get('/users/random/:count', async (req, res) => {
