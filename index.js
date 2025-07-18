@@ -11,7 +11,12 @@ const port = process.env.PORT || 3000
 
 // Middleware
 const corsOptions = {
-  origin: ['http://localhost:5173'],
+  origin: [
+    'https://ph-assignment-12-c3db9.web.app',
+    'https://ph-assignment-12-c3db9.firebaseapp.com',
+    'http://localhost:5173',
+    'http://localhost:5174',
+  ],
   credentials: true,
 }
 app.use(cors(corsOptions))
@@ -54,7 +59,7 @@ async function run() {
       next()
     }
 
-    await client.connect();
+    // await client.connect();
 
     // POST /jwt (get token)
     app.post('/jwt', async (req, res) => {
@@ -689,8 +694,29 @@ async function run() {
       }
     });
 
+    // get random packages
+    app.get('/packages/random/:count', async (req, res) => {
+      const count = parseInt(req.params.count)
+      const result = await packagesCollection.aggregate([{ $sample: { size: count } }]).toArray()
+      res.send(result)
+    })
 
+    // get random guides 'tourGuide'
+    app.get('/users/random/:count', async (req, res) => {
+      try {
+        const count = parseInt(req.params.count);
 
+        const result = await usersCollection.aggregate([
+          { $match: { role: { $regex: '^tourGuide$', $options: 'i' } } },
+          { $sample: { size: count } }
+        ]).toArray();
+
+        res.send(result);
+      } catch (error) {
+        console.error('Error fetching random tour guides:', error);
+        res.status(500).send({ error: 'Internal server error' });
+      }
+    });
 
 
 
@@ -703,7 +729,7 @@ async function run() {
 
 
     // Send a ping to confirm a successful connection
-    await client.db('admin').command({ ping: 1 })
+    // await client.db('admin').command({ ping: 1 })
     console.log('Pinged your deployment (GIRO) --> MongoDB!')
   } finally {
     // 
