@@ -712,7 +712,7 @@ async function run() {
         const count = parseInt(req.params.count);
 
         const result = await storiesCollection.aggregate([
-          { $match: { author_role: { $regex: '^tourGuide$', $options: 'i' } } },
+          { $match: { author_role: { $regex: '^tourist$', $options: 'i' } } },
           { $sample: { size: count } }
         ]).toArray();
 
@@ -737,6 +737,24 @@ async function run() {
       } catch (error) {
         console.error('Error fetching random tour guides:', error);
         res.status(500).send({ error: 'Internal server error' });
+      }
+    });
+
+    app.get('/bookings/user/:email', verifyToken, async (req, res) => {
+      try {
+        const { email } = req.params;
+
+        if (req.user.email !== email) {
+          return res.status(403).send({ error: 'Forbidden' });
+        }v
+
+        const query = { touristEmail: email };
+        const bookings = await bookingsCollection.find(query).sort({ createdAt: -1 }).toArray();
+
+        res.send(bookings);
+      } catch (error) {
+        console.error('Error fetching bookings:', error);
+        res.status(500).send({ error: 'Failed to get user bookings' });
       }
     });
 
