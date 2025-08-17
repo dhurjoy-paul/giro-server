@@ -12,6 +12,8 @@ const port = process.env.PORT || 3000
 // Middleware
 const corsOptions = {
   origin: [
+    'https://giro-live.web.app',
+    'https://giro-live.firebaseapp.com',
     'https://ph-assignment-12-c3db9.web.app',
     'https://ph-assignment-12-c3db9.firebaseapp.com',
     'http://localhost:5173',
@@ -444,11 +446,27 @@ async function run() {
       }
     });
 
-    // get all packages
+    // get all packages with sorting
     app.get('/packages', async (req, res) => {
-      const result = await packagesCollection.find().toArray()
-      res.send(result);
-    })
+      try {
+        const { field, order } = req.query;
+
+        let sortOptions = {};
+
+        if (field === 'price') {
+          sortOptions = { price: order === 'asc' ? 1 : -1 };
+        } else {
+          // Default to createdAt descending
+          sortOptions = { createdAt: -1 };
+        }
+
+        const result = await packagesCollection.find().sort(sortOptions).toArray();
+        res.send(result);
+      } catch (error) {
+        console.error('Error fetching packages:', error);
+        res.status(500).send({ message: 'Failed to fetch packages' });
+      }
+    });
 
     // get Package by ID
     app.get('/packages/:id', async (req, res) => {
@@ -746,7 +764,7 @@ async function run() {
 
         if (req.user.email !== email) {
           return res.status(403).send({ error: 'Forbidden' });
-        }v
+        } v
 
         const query = { touristEmail: email };
         const bookings = await bookingsCollection.find(query).sort({ createdAt: -1 }).toArray();
